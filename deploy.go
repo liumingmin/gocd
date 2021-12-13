@@ -116,13 +116,10 @@ func (j *DeployServer) getOrCreateJob(ctx context.Context, name, ip string) (*go
 
 //程序运行配置中，抽提db信息放到环境变量中运行时传递
 //不同环境的配置文件直接写入程序包,动态内容使用环境变量设置
-func (j *DeployServer) Deploy(ctx context.Context, name, ip string, param *DeployParam) (<-chan int64, error) {
-	buildIdChan := make(chan int64, 1)
-
+func (j *DeployServer) Deploy(ctx context.Context, name, ip string, param *DeployParam) (int64, error) {
 	job, err := j.getOrCreateJob(ctx, name, ip)
 	if err != nil {
-		buildIdChan <- 0
-		return buildIdChan, err
+		return 0, err
 	}
 
 	var envsStr strings.Builder
@@ -142,36 +139,24 @@ func (j *DeployServer) Deploy(ctx context.Context, name, ip string, param *Deplo
 	taskId, err := job.InvokeSimple(ctx, params)
 	if err != nil {
 		log.Error(ctx, "job build failed: %v", err)
-
-		buildIdChan <- 0
-		return buildIdChan, err
+		return 0, err
 	}
 
-	go func() {
-		for {
-			time.Sleep(j.fetchBuildTime)
-
-			task, err := j.jenkins.GetQueueItem(ctx, taskId)
-			if err != nil || task == nil {
-				continue
-			}
-
-			if task.Raw.Executable.URL != "" {
-				log.Info(ctx, "job build %v", task.Raw.Executable.Number)
-				buildIdChan <- task.Raw.Executable.Number
-				break
-			}
-		}
-	}()
-
-	return buildIdChan, nil
+	return taskId, nil
 }
 
-func (j *DeployServer) GetDeployResult(ctx context.Context, name, ip string, buildId int64) (*DeployResult, error) {
+func (j *DeployServer) GetDeployResult(ctx context.Context, name, ip string, taskId int64) (*DeployResult, error) {
 	jobName := fmt.Sprintf("%v-%v-%v", j.env, name, ip)
-	build, err := j.jenkins.GetBuild(ctx, jobName, buildId)
+
+	job, err := j.jenkins.GetJob(ctx, jobName)
+	if err != nil {
+		log.Error(ctx, "get job from jenkins failed: %v, err: %v", jobName, err)
+		return nil, err
+	}
+
+	build, err := j.jenkins.GetBuildFromQueueID(ctx, job, taskId)
 	if err != nil || build == nil {
-		log.Error(ctx, "get build from jenkins failed: %v, err: %v", buildId, err)
+		log.Error(ctx, "get build from jenkins failed: %v, err: %v", taskId, err)
 		return nil, err
 	}
 

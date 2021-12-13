@@ -13,7 +13,7 @@ func getJServer() *DeployServer {
 }
 
 func TestDeploy(t *testing.T) {
-	bchan, _ := getJServer().Deploy(context.Background(), "test", "master", &DeployParam{
+	taskId, _ := getJServer().Deploy(context.Background(), "test", "master", &DeployParam{
 		PkgUrl:     "http://10.11.244.107/pkg.tgz",
 		TargetPath: "/tmp/test",
 		RunCmd:     "run.sh",
@@ -24,8 +24,7 @@ func TestDeploy(t *testing.T) {
 		},
 	})
 
-	buildId := <-bchan
-	t.Log(buildId)
+	t.Log(taskId)
 	//server.getOrCreateJob(context.Background(), "test", "master")
 }
 
