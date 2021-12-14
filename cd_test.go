@@ -7,9 +7,10 @@ import (
 	"testing"
 )
 
-func getJServer() *DeployServer {
+func getJServer() *CdServer {
 	//http://127.0.0.1:8091/user/admin/configure 获取apitoken
-	return NewDeployServer(context.Background(), "dev", "http://127.0.0.1:8091/", "admin", "116e908012f0e76a71c788619470681f83")
+	return NewCdServer(context.Background(), "http://127.0.0.1:8091/", "admin", "116e908012f0e76a71c788619470681f83",
+		NewCdNodeInfo(), CdServerEnvOption("dev"))
 }
 
 func TestDeploy(t *testing.T) {
@@ -29,7 +30,8 @@ func TestDeploy(t *testing.T) {
 }
 
 func TestGetJobRaw(t *testing.T) {
-	server := NewDeployServer(context.Background(), "dev", "http://127.0.0.1:8091/", "admin", "admin")
+	server := NewCdServer(context.Background(), "http://127.0.0.1:8091/", "admin", "admin",
+		NewCdNodeInfo(), CdServerEnvOption("dev"))
 	job, _ := server.getOrCreateJob(context.Background(), "test", "master")
 	fmt.Println(job.GetConfig(context.Background()))
 }

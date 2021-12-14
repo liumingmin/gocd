@@ -16,14 +16,18 @@ const (
 	RUN_STATUS_ERR     = 3
 )
 
-type DeployServer struct {
-	jenkins        *gojenkins.Jenkins
-	env            string
-	credentialsId  string
-	jvmOptions     string
-	numExecutors   int
-	remoteFs       string
-	fetchBuildTime time.Duration
+type CdServer struct {
+	jenkins       *gojenkins.Jenkins
+	env           string
+	defCdNodeInfo *CdNodeInfo
+}
+
+type CdNodeInfo struct {
+	credentialsId string
+	jvmOptions    string
+	numExecutors  int
+	remoteFs      string
+	sshPort       string
 }
 
 type DeployParam struct {
@@ -39,59 +43,76 @@ type DeployResult struct {
 	ConsoleOutput string
 }
 
-func NewDeployServer(ctx context.Context, env, url, username, token string) *DeployServer {
+func NewCdServer(ctx context.Context, url, username, token string, cdNodeInfo *CdNodeInfo, options ...CdServerOption) *CdServer {
 	jenkins := gojenkins.CreateJenkins(nil, url, username, token)
 	_, err := jenkins.Init(ctx)
 	if err != nil {
 		log.Error(ctx, "jenkins init failed, err: %v", err)
 	}
-	return &DeployServer{
-		jenkins:        jenkins,
-		env:            env,
-		numExecutors:   2,
-		jvmOptions:     "-Xms16m -Xmx64m",
-		remoteFs:       "/var/lib/jenkins",
-		fetchBuildTime: time.Second,
+	cdServer := &CdServer{
+		jenkins:       jenkins,
+		env:           "prod",
+		defCdNodeInfo: cdNodeInfo,
 	}
+
+	if len(options) > 0 {
+		for _, option := range options {
+			option(cdServer)
+		}
+	}
+	return cdServer
 }
 
-func (j *DeployServer) SetCredentialsId(credentialsId string) {
-	j.credentialsId = credentialsId
-}
-
-func (j *DeployServer) SetJvmOptions(jvmOptions string) {
-	j.jvmOptions = jvmOptions
-}
-
-func (j *DeployServer) SetNumExecutors(numExecutors int) {
-	j.numExecutors = numExecutors
+func NewCdNodeInfo(options ...CdNodeOption) *CdNodeInfo {
+	cdNodeInfo := &CdNodeInfo{
+		numExecutors: 1,
+		jvmOptions:   "-Xms16m -Xmx64m",
+		remoteFs:     "/var/lib/jenkins",
+		sshPort:      "22",
+	}
+	if len(options) > 0 {
+		for _, option := range options {
+			option(cdNodeInfo)
+		}
+	}
+	return cdNodeInfo
 }
 
 //最好使用内网IP
-func (j *DeployServer) CreateNode(ctx context.Context, ip, sshPort, remark string) error {
+func (j *CdServer) CreateNode(ctx context.Context, ip, remark string, options ...CdNodeOption) error {
+	cdNodeInfo := j.defCdNodeInfo
+	if len(options) > 0 {
+		cdNodeInfo = &CdNodeInfo{}
+		*cdNodeInfo = *j.defCdNodeInfo
+
+		for _, option := range options {
+			option(cdNodeInfo)
+		}
+	}
+
 	desc := fmt.Sprintf("%v:(%v)%v", j.env, ip, remark)
-	node, err := j.jenkins.CreateNode(ctx, ip, j.numExecutors, desc, j.remoteFs, ip,
+	node, err := j.jenkins.CreateNode(ctx, ip, cdNodeInfo.numExecutors, desc, cdNodeInfo.remoteFs, ip,
 		map[string]string{
 			"method":        "SSHLauncher",
 			"host":          ip,
-			"port":          sshPort,
-			"credentialsId": j.credentialsId,
-			"jvmOptions":    j.jvmOptions,
+			"port":          cdNodeInfo.sshPort,
+			"credentialsId": cdNodeInfo.credentialsId,
+			"jvmOptions":    cdNodeInfo.jvmOptions,
 		})
 	if err != nil {
 		log.Error(ctx, "CreateNode failed, err: %v", err)
+		return err
 	}
 	log.Info(ctx, "CreateNode: %v", node)
-
-	return err
+	return nil
 }
 
 //todo
-func (j *DeployServer) GetNode(ctx context.Context, ip string) (*gojenkins.Node, error) {
-	return j.jenkins.GetNode(ctx, ip)
-}
+//func (j *CdServer) GetNode(ctx context.Context, ip string) (*gojenkins.Node, error) {
+//	return j.jenkins.GetNode(ctx, ip)
+//}
 
-func (j *DeployServer) getOrCreateJob(ctx context.Context, name, ip string) (*gojenkins.Job, error) {
+func (j *CdServer) getOrCreateJob(ctx context.Context, name, ip string) (*gojenkins.Job, error) {
 	jobName := fmt.Sprintf("%v-%v-%v", j.env, name, ip)
 
 	job, err := j.jenkins.GetJob(ctx, jobName)
@@ -116,7 +137,7 @@ func (j *DeployServer) getOrCreateJob(ctx context.Context, name, ip string) (*go
 
 //程序运行配置中，抽提db信息放到环境变量中运行时传递
 //不同环境的配置文件直接写入程序包,动态内容使用环境变量设置
-func (j *DeployServer) Deploy(ctx context.Context, name, ip string, param *DeployParam) (int64, error) {
+func (j *CdServer) Deploy(ctx context.Context, name, ip string, param *DeployParam) (int64, error) {
 	job, err := j.getOrCreateJob(ctx, name, ip)
 	if err != nil {
 		return 0, err
@@ -145,7 +166,7 @@ func (j *DeployServer) Deploy(ctx context.Context, name, ip string, param *Deplo
 	return taskId, nil
 }
 
-func (j *DeployServer) GetDeployResult(ctx context.Context, name, ip string, taskId int64) (*DeployResult, error) {
+func (j *CdServer) GetDeployResult(ctx context.Context, name, ip string, taskId int64) (*DeployResult, error) {
 	jobName := fmt.Sprintf("%v-%v-%v", j.env, name, ip)
 
 	job, err := j.jenkins.GetJob(ctx, jobName)
