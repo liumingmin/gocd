@@ -4,7 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"testing"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
 func getJServer() *CdServer {
@@ -40,4 +47,30 @@ func TestGetTaskBuild(t *testing.T) {
 	build, _ := getJServer().GetDeployResult(context.Background(), "test", "master", 8)
 	bs, _ := json.Marshal(build)
 	t.Log(string(bs))
+}
+
+func TestS3Get(t *testing.T) {
+	sess, _ := session.NewSession(&aws.Config{
+		Credentials: credentials.NewStaticCredentials("Vg6p9p/WM55ZbiZkE8Vyzw==",
+			"r0yRc7Yxc0fB7yWRoaWJrvLlC3hShtqBFfqj13PKTLo=", ""),
+		Region:           aws.String("us-east-1"),
+		Endpoint:         aws.String("http://localhost:9005"),
+		DisableSSL:       aws.Bool(true),
+		S3ForcePathStyle: aws.Bool(true),
+	},
+	)
+
+	downloader := s3manager.NewDownloader(sess)
+	buffer := aws.NewWriteAtBuffer([]byte{})
+	_, err := downloader.Download(buffer,
+		&s3.GetObjectInput{
+			Bucket: aws.String("test"),
+			Key:    aws.String("pkg.tgz"),
+		})
+	if err != nil {
+		t.Log(err)
+		return
+	}
+
+	ioutil.WriteFile("./pkg.tgz", buffer.Bytes(), 0666)
 }

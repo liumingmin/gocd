@@ -30,11 +30,20 @@ type CdNodeInfo struct {
 	sshPort       string
 }
 
-type DeployParam struct {
+type CdServiceInfo struct {
 	PkgUrl     string
 	TargetPath string
 	RunCmd     string
+	Script     string
+}
+
+type DeployParam struct {
+	PkgVersion string
 	EnvVar     map[string]string
+
+	PkgUrl     string
+	TargetPath string
+	RunCmd     string
 }
 
 type DeployResult struct {
@@ -78,7 +87,7 @@ func NewCdNodeInfo(options ...CdNodeOption) *CdNodeInfo {
 	return cdNodeInfo
 }
 
-//最好使用内网IP
+//最好使用内网IP todo 如果是内网IP 不同环境可能重复!
 func (j *CdServer) CreateNode(ctx context.Context, ip, remark string, options ...CdNodeOption) error {
 	cdNodeInfo := j.defCdNodeInfo
 	if len(options) > 0 {
@@ -107,10 +116,20 @@ func (j *CdServer) CreateNode(ctx context.Context, ip, remark string, options ..
 	return nil
 }
 
+func (j *CdServer) UpdateNode(ctx context.Context, ip string) error {
+	//node, err := j.jenkins.GetNode(ctx, ip)
+	//if err != nil {
+	//	return err
+	//}
+
+	//node.
+	return nil
+}
+
 //todo
-//func (j *CdServer) GetNode(ctx context.Context, ip string) (*gojenkins.Node, error) {
-//	return j.jenkins.GetNode(ctx, ip)
-//}
+func (j *CdServer) GetNode(ctx context.Context, ip string) (*gojenkins.Node, error) {
+	return j.jenkins.GetNode(ctx, ip)
+}
 
 func (j *CdServer) getOrCreateJob(ctx context.Context, name, ip string) (*gojenkins.Job, error) {
 	jobName := fmt.Sprintf("%v-%v-%v", j.env, name, ip)
