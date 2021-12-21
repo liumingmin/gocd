@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -17,12 +17,19 @@ import (
 func getJServer() *CdServer {
 	//http://127.0.0.1:8091/user/admin/configure 获取apitoken
 	return NewCdServer(context.Background(), "http://127.0.0.1:8091/", "admin", "116e908012f0e76a71c788619470681f83",
-		NewCdNodeInfo(), CdServerEnvOption("dev"))
+		CdServerEnvOption("prod"), CdServerS3Option(
+			"Vg6p9p/WM55ZbiZkE8Vyzw==",
+			"r0yRc7Yxc0fB7yWRoaWJrvLlC3hShtqBFfqj13PKTLo=",
+			"http://localhost:9005",
+			"test",
+			"zh-south-1",
+		))
 }
 
 func TestDeploy(t *testing.T) {
+	//todo download s3get
 	taskId, _ := getJServer().Deploy(context.Background(), "test", "master", &DeployParam{
-		PkgUrl:     "http://10.11.244.107/pkg.tgz",
+		PkgUrl:     "pkg.tgz", //http://10.11.244.107/pkg.tgz
 		TargetPath: "/tmp/test",
 		RunCmd:     "run.sh",
 		EnvVar: map[string]string{
@@ -38,7 +45,7 @@ func TestDeploy(t *testing.T) {
 
 func TestGetJobRaw(t *testing.T) {
 	server := NewCdServer(context.Background(), "http://127.0.0.1:8091/", "admin", "admin",
-		NewCdNodeInfo(), CdServerEnvOption("dev"))
+		CdServerEnvOption("prod"))
 	job, _ := server.getOrCreateJob(context.Background(), "test", "master")
 	fmt.Println(job.GetConfig(context.Background()))
 }
@@ -53,7 +60,7 @@ func TestS3Get(t *testing.T) {
 	sess, _ := session.NewSession(&aws.Config{
 		Credentials: credentials.NewStaticCredentials("Vg6p9p/WM55ZbiZkE8Vyzw==",
 			"r0yRc7Yxc0fB7yWRoaWJrvLlC3hShtqBFfqj13PKTLo=", ""),
-		Region:           aws.String("us-east-1"),
+		Region:           aws.String("zh-south-1"),
 		Endpoint:         aws.String("http://localhost:9005"),
 		DisableSSL:       aws.Bool(true),
 		S3ForcePathStyle: aws.Bool(true),
@@ -61,8 +68,12 @@ func TestS3Get(t *testing.T) {
 	)
 
 	downloader := s3manager.NewDownloader(sess)
-	buffer := aws.NewWriteAtBuffer([]byte{})
-	_, err := downloader.Download(buffer,
+	file, err := os.Create("./pkg.tgz")
+	if err != nil {
+		t.Log(err)
+		return
+	}
+	_, err = downloader.Download(file,
 		&s3.GetObjectInput{
 			Bucket: aws.String("test"),
 			Key:    aws.String("pkg.tgz"),
@@ -72,5 +83,5 @@ func TestS3Get(t *testing.T) {
 		return
 	}
 
-	ioutil.WriteFile("./pkg.tgz", buffer.Bytes(), 0666)
+	//ioutil.WriteFile("./pkg.tgz", buffer.Bytes(), 0666)
 }

@@ -8,6 +8,43 @@ func CdServerEnvOption(env string) CdServerOption {
 	}
 }
 
+func CdServerNodeOption(options ...CdNodeOption) CdServerOption {
+	return func(server *CdServer) {
+		server.defCdNodeInfo = NewCdNodeInfo(options...)
+	}
+}
+
+func CdServerS3Option(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region string) CdServerOption {
+	return func(server *CdServer) {
+		server.s3Info = NewCdS3Info(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region)
+	}
+}
+
+func NewCdS3Info(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region string) *CdS3Info {
+	return &CdS3Info{
+		s3AK:       s3AK,
+		s3SK:       s3SK,
+		s3Endpoint: s3Endpoint,
+		s3Bucket:   s3Bucket,
+		s3Region:   s3Region,
+	}
+}
+
+func NewCdNodeInfo(options ...CdNodeOption) *CdNodeInfo {
+	cdNodeInfo := &CdNodeInfo{
+		numExecutors: 1,
+		jvmOptions:   "-Xms16m -Xmx64m",
+		remoteFs:     "/var/lib/jenkins",
+		sshPort:      "22",
+	}
+	if len(options) > 0 {
+		for _, option := range options {
+			option(cdNodeInfo)
+		}
+	}
+	return cdNodeInfo
+}
+
 type CdNodeOption func(*CdNodeInfo)
 
 func CdNodeCredIdOption(credId string) CdNodeOption {

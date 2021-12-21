@@ -20,6 +20,7 @@ type CdServer struct {
 	jenkins       *gojenkins.Jenkins
 	env           string
 	defCdNodeInfo *CdNodeInfo
+	s3Info        *CdS3Info
 }
 
 type CdNodeInfo struct {
@@ -30,6 +31,15 @@ type CdNodeInfo struct {
 	sshPort       string
 }
 
+type CdS3Info struct {
+	s3AK       string
+	s3SK       string
+	s3Endpoint string
+	s3Bucket   string
+	s3Region   string
+}
+
+//todo service
 type CdServiceInfo struct {
 	PkgUrl     string
 	TargetPath string
@@ -38,8 +48,8 @@ type CdServiceInfo struct {
 }
 
 type DeployParam struct {
-	PkgVersion string
-	EnvVar     map[string]string
+	//PkgVersion string
+	EnvVar map[string]string
 
 	PkgUrl     string
 	TargetPath string
@@ -52,16 +62,15 @@ type DeployResult struct {
 	ConsoleOutput string
 }
 
-func NewCdServer(ctx context.Context, url, username, token string, cdNodeInfo *CdNodeInfo, options ...CdServerOption) *CdServer {
+func NewCdServer(ctx context.Context, url, username, token string, options ...CdServerOption) *CdServer {
 	jenkins := gojenkins.CreateJenkins(nil, url, username, token)
 	_, err := jenkins.Init(ctx)
 	if err != nil {
 		log.Error(ctx, "jenkins init failed, err: %v", err)
 	}
 	cdServer := &CdServer{
-		jenkins:       jenkins,
-		env:           "prod",
-		defCdNodeInfo: cdNodeInfo,
+		jenkins: jenkins,
+		env:     "dev",
 	}
 
 	if len(options) > 0 {
@@ -69,22 +78,12 @@ func NewCdServer(ctx context.Context, url, username, token string, cdNodeInfo *C
 			option(cdServer)
 		}
 	}
-	return cdServer
-}
 
-func NewCdNodeInfo(options ...CdNodeOption) *CdNodeInfo {
-	cdNodeInfo := &CdNodeInfo{
-		numExecutors: 1,
-		jvmOptions:   "-Xms16m -Xmx64m",
-		remoteFs:     "/var/lib/jenkins",
-		sshPort:      "22",
+	if cdServer.defCdNodeInfo == nil {
+		cdServer.defCdNodeInfo = NewCdNodeInfo()
 	}
-	if len(options) > 0 {
-		for _, option := range options {
-			option(cdNodeInfo)
-		}
-	}
-	return cdNodeInfo
+
+	return cdServer
 }
 
 //最好使用内网IP todo 如果是内网IP 不同环境可能重复!
@@ -154,8 +153,19 @@ func (j *CdServer) getOrCreateJob(ctx context.Context, name, ip string) (*gojenk
 	return job, nil
 }
 
+func (j *CdServer) s3Env() map[string]string {
+	return map[string]string{
+		"GOCD_S3_AK":       j.s3Info.s3AK,
+		"GOCD_S3_SK":       j.s3Info.s3SK,
+		"GOCD_S3_ENDPOINT": j.s3Info.s3Endpoint,
+		"GOCD_S3_BUCKET":   j.s3Info.s3Bucket,
+		"GOCD_S3_REGION":   j.s3Info.s3Region,
+	}
+}
+
 //程序运行配置中，抽提db信息放到环境变量中运行时传递
 //不同环境的配置文件直接写入程序包,动态内容使用环境变量设置
+//部署类型支持http?
 func (j *CdServer) Deploy(ctx context.Context, name, ip string, param *DeployParam) (int64, error) {
 	job, err := j.getOrCreateJob(ctx, name, ip)
 	if err != nil {
@@ -163,6 +173,12 @@ func (j *CdServer) Deploy(ctx context.Context, name, ip string, param *DeployPar
 	}
 
 	var envsStr strings.Builder
+
+	//s3get env
+	for key, value := range j.s3Env() {
+		envsStr.WriteString(fmt.Sprintf(" %v=%v", key, value))
+	}
+
 	for key, value := range param.EnvVar {
 		envsStr.WriteString(fmt.Sprintf(" %v=%v", key, value))
 	}
@@ -170,7 +186,7 @@ func (j *CdServer) Deploy(ctx context.Context, name, ip string, param *DeployPar
 	params := map[string]string{
 		"RUN_ENV":     j.env,
 		"HOST_IP":     ip,
-		"PKG_URL":     param.PkgUrl,
+		"PKG_URL":     param.PkgUrl, //s3get download package
 		"TARGET_PATH": param.TargetPath,
 		"RUN_CMD":     param.RunCmd,
 		"ENV_VAR":     envsStr.String(),
