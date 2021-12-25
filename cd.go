@@ -32,11 +32,12 @@ type CdNodeInfo struct {
 }
 
 type CdS3Info struct {
-	s3AK       string
-	s3SK       string
-	s3Endpoint string
-	s3Bucket   string
-	s3Region   string
+	s3AK         string
+	s3SK         string
+	s3Endpoint   string
+	s3Bucket     string
+	s3Region     string
+	s3GetToolUrl string
 }
 
 //todo service
@@ -135,9 +136,13 @@ func (j *CdServer) getOrCreateJob(ctx context.Context, name, ip string) (*gojenk
 
 	job, err := j.jenkins.GetJob(ctx, jobName)
 	if err != nil {
-		jobConfig := strings.Replace(DEFAULT_JOB_TPL, "$$SCRIPT_CONTENT$$", JOB_BASE_SCRIPT, -1)
-		jobConfig = strings.Replace(jobConfig, "$$HOST_IP$$", ip, -1)
-		_, err = j.jenkins.CreateJob(ctx, jobConfig, jobName)
+		taskConfig, err := getCdTaskConfig(ip)
+		fmt.Println(taskConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = j.jenkins.CreateJob(ctx, taskConfig, jobName)
 		if err != nil {
 			log.Error(ctx, "CreateJob failed: %v, err: %v", jobName, err)
 			return nil, err
@@ -172,13 +177,13 @@ func (j *CdServer) Deploy(ctx context.Context, name, ip string, param *DeployPar
 		return 0, err
 	}
 
-	var envsStr strings.Builder
-
 	//s3get env
+	var s3EnvsStr strings.Builder
 	for key, value := range j.s3Env() {
-		envsStr.WriteString(fmt.Sprintf(" %v=%v", key, value))
+		s3EnvsStr.WriteString(fmt.Sprintf(" %v=%v", key, value))
 	}
 
+	var envsStr strings.Builder
 	for key, value := range param.EnvVar {
 		envsStr.WriteString(fmt.Sprintf(" %v=%v", key, value))
 	}
@@ -186,6 +191,8 @@ func (j *CdServer) Deploy(ctx context.Context, name, ip string, param *DeployPar
 	params := map[string]string{
 		"RUN_ENV":     j.env,
 		"HOST_IP":     ip,
+		"S3GET_URL":   j.s3Info.s3GetToolUrl,
+		"S3ENV_VAR":   s3EnvsStr.String(),
 		"PKG_URL":     param.PkgUrl, //s3get download package
 		"TARGET_PATH": param.TargetPath,
 		"RUN_CMD":     param.RunCmd,

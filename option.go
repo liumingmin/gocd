@@ -14,19 +14,20 @@ func CdServerNodeOption(options ...CdNodeOption) CdServerOption {
 	}
 }
 
-func CdServerS3Option(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region string) CdServerOption {
+func CdServerS3Option(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region, s3getToolUrl string) CdServerOption {
 	return func(server *CdServer) {
-		server.s3Info = NewCdS3Info(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region)
+		server.s3Info = NewCdS3Info(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region, s3getToolUrl)
 	}
 }
 
-func NewCdS3Info(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region string) *CdS3Info {
+func NewCdS3Info(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region, s3getToolUrl string) *CdS3Info {
 	return &CdS3Info{
-		s3AK:       s3AK,
-		s3SK:       s3SK,
-		s3Endpoint: s3Endpoint,
-		s3Bucket:   s3Bucket,
-		s3Region:   s3Region,
+		s3AK:         s3AK,
+		s3SK:         s3SK,
+		s3Endpoint:   s3Endpoint,
+		s3Bucket:     s3Bucket,
+		s3Region:     s3Region,
+		s3GetToolUrl: s3getToolUrl,
 	}
 }
 

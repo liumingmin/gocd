@@ -3,7 +3,6 @@ package gocd
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 
@@ -20,14 +19,14 @@ func getJServer() *CdServer {
 		CdServerEnvOption("prod"), CdServerS3Option(
 			"Vg6p9p/WM55ZbiZkE8Vyzw==",
 			"r0yRc7Yxc0fB7yWRoaWJrvLlC3hShtqBFfqj13PKTLo=",
-			"http://localhost:9005",
+			"http://192.168.0.109:9005",
 			"test",
 			"zh-south-1",
+			"http://192.168.0.109/s3get.tgz",
 		))
 }
 
 func TestDeploy(t *testing.T) {
-	//todo download s3get
 	taskId, _ := getJServer().Deploy(context.Background(), "test", "master", &DeployParam{
 		PkgUrl:     "pkg.tgz", //http://10.11.244.107/pkg.tgz
 		TargetPath: "/tmp/test",
@@ -43,15 +42,15 @@ func TestDeploy(t *testing.T) {
 	//server.getOrCreateJob(context.Background(), "test", "master")
 }
 
-func TestGetJobRaw(t *testing.T) {
-	server := NewCdServer(context.Background(), "http://127.0.0.1:8091/", "admin", "admin",
-		CdServerEnvOption("prod"))
-	job, _ := server.getOrCreateJob(context.Background(), "test", "master")
-	fmt.Println(job.GetConfig(context.Background()))
-}
+//func TestGetJobRaw(t *testing.T) {
+//	server := NewCdServer(context.Background(), "http://127.0.0.1:8091/", "admin", "admin",
+//		CdServerEnvOption("prod"))
+//	job, _ := server.getOrCreateJob(context.Background(), "test", "master")
+//	fmt.Println(job.GetConfig(context.Background()))
+//}
 
 func TestGetTaskBuild(t *testing.T) {
-	build, _ := getJServer().GetDeployResult(context.Background(), "test", "master", 8)
+	build, _ := getJServer().GetDeployResult(context.Background(), "test", "master", 18)
 	bs, _ := json.Marshal(build)
 	t.Log(string(bs))
 }

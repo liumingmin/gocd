@@ -1,6 +1,89 @@
 package gocd
 
-const DEFAULT_JOB_TPL = `<?xml version='1.1' encoding='UTF-8'?>
+import (
+	"bytes"
+	"context"
+	"text/template"
+
+	"github.com/liumingmin/goutils/log"
+)
+
+var (
+	taskDef      *TaskDef
+	taskTemplate *template.Template
+)
+
+type ParameterDef struct {
+	Name         string
+	Description  string
+	DefaultValue string
+}
+
+type TaskDef struct {
+	ParameterDefs []*ParameterDef
+	ScriptContent string
+}
+
+type NodeTaskDef struct {
+	*TaskDef
+	HostIp string
+}
+
+func getCdTaskConfig(hostIp string) (string, error) {
+	nodeTaskDef := &NodeTaskDef{HostIp: hostIp, TaskDef: taskDef}
+	buf := new(bytes.Buffer)
+	err := taskTemplate.Execute(buf, nodeTaskDef)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func initTaskDef() {
+	taskDef = &TaskDef{
+		ParameterDefs: []*ParameterDef{
+			{
+				Name:         "RUN_ENV",
+				DefaultValue: "dev",
+			},
+			{
+				Name: "S3GET_URL",
+			},
+			{
+				Name: "S3ENV_VAR",
+			},
+			{
+				Name: "PKG_URL",
+			},
+			{
+				Name: "TARGET_PATH",
+			},
+			{
+				Name: "RUN_CMD",
+			},
+			{
+				Name: "ENV_VAR",
+			},
+		},
+		ScriptContent: defaultTaskScript,
+	}
+}
+
+func initTaskTpl() {
+	tmpl, err := template.New("defaultTaskTpl").Parse(TASK_TPL)
+	if err != nil {
+		log.Error(context.Background(), "parse tpl failed, err: %v", err)
+		return
+	}
+	taskTemplate = tmpl
+}
+
+func init() {
+	initTaskTpl()
+	initTaskDef()
+}
+
+const TASK_TPL = `<?xml version='1.1' encoding='UTF-8'?>
 <project>
   <actions/>
   <description></description>
@@ -12,47 +95,19 @@ const DEFAULT_JOB_TPL = `<?xml version='1.1' encoding='UTF-8'?>
     </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
-        <hudson.model.StringParameterDefinition>
-          <name>RUN_ENV</name>
-          <description></description>
-          <defaultValue>dev</defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>HOST_IP</name>
-          <description></description>
-          <defaultValue>nil</defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>PKG_URL</name>
-          <description></description>
-          <defaultValue></defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-		<hudson.model.StringParameterDefinition>
-          <name>TARGET_PATH</name>
-          <description></description>
-          <defaultValue></defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-		<hudson.model.StringParameterDefinition>
-          <name>RUN_CMD</name>
-          <description></description>
-          <defaultValue></defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-		<hudson.model.StringParameterDefinition>
-          <name>ENV_VAR</name>
-          <description></description>
-          <defaultValue></defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
+        {{range .ParameterDefs}}
+			<hudson.model.StringParameterDefinition>
+			  <name>{{.Name}}</name>
+			  <description>{{.Description}}</description>
+			  <defaultValue>{{.DefaultValue}}</defaultValue>
+			  <trim>true</trim>
+			</hudson.model.StringParameterDefinition>
+		{{end}}
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
   <scm class="hudson.scm.NullSCM"/>
-  <assignedNode>$$HOST_IP$$</assignedNode>
+  <assignedNode>{{.HostIp}}</assignedNode>
   <canRoam>false</canRoam>
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
@@ -61,59 +116,73 @@ const DEFAULT_JOB_TPL = `<?xml version='1.1' encoding='UTF-8'?>
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command><![CDATA[$$SCRIPT_CONTENT$$]]></command>
+      <command><![CDATA[{{.ScriptContent}}]]></command>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
   <buildWrappers/>
 </project>`
 
-const JOB_BASE_SCRIPT = `#!/bin/bash -il
+const defaultTaskScript = `#!/bin/bash -il
 #jenkins内置参数
 #NODE_NAME
-#WORKSPACE
 
 #固定参数
 #RUN_ENV 运行环境
-#HOST_IP 目标机器IP
-#PKG_URL 程序包远程地址
-#TARGET_PATH 节点程序目录
+#S3GET_URL s3get工具下载地址
+#S3ENV_VAR s3get环境变量
+#PKG_URL 程序包s3 key
+#TARGET_PATH 程序目录
 #RUN_CMD 运行脚本
 #ENV_VAR 环境变量
 
-if [[ "${HOST_IP}" != "${NODE_NAME}" ]];then
-   echo "jenkins: ${HOST_IP} not match agent node name ${NODE_NAME}..."
-   exit 1
+#变量
+S3GET_PATH="/tmp/s3get"
+mkdir -p /tmp
+
+#下载s3工具
+if [[ ! -f ${S3GET_PATH} ]]; then
+    echo "gocd: downloading s3get..."
+     ( flock -x 42;
+      if [[ ! -f ${S3GET_PATH} ]]; then
+        curl -s --insecure ${S3GET_URL} -o ${S3GET_PATH}.tgz
+        tar -xzf ${S3GET_PATH}.tgz -C $(dirname ${S3GET_PATH}.tgz)
+        EXIT_CODE=$?
+
+        if [[ EXIT_CODE -ne 0 ]]; then
+            echo "gocd: download s3get tgz failed ${S3GET_URL}..."
+            rm -f ${S3GET_PATH}.tgz
+            rm -f ${S3GET_PATH}
+            exit 1
+        fi
+        chmod +x ${S3GET_PATH}
+      fi
+     ) 42>"${S3GET_PATH}.lock"
 fi
 
-DATENAME=$(date +%Y%m%d%H%M%S-%N)
-PKG_PATH="${WORKSPACE}/${RANDOM}-${DATENAME}.tgz"
-RUN_PATH="${TARGET_PATH}/run.sh"
 
-mkdir -p ${WORKSPACE}
 mkdir -p ${TARGET_PATH}
+DATENAME=$(date +%Y%m%d%H%M%S-%N)
+TMP_PKG_DIR=${TARGET_PATH}/tmppkg${DATENAME}
+mkdir ${TMP_PKG_DIR}
 
-curl -s ${PKG_URL} -o ${PKG_PATH}
-
-if [[ ! -f "${PKG_PATH}" ]]; then
-   echo "jenkins: not found pkg ${PKG_PATH}..."
-   exit 1
-fi
-
-tar -zxf  ${PKG_PATH}  -C ${TARGET_PATH}
+#下载程序包
+export ${S3ENV_VAR}
+${S3GET_PATH} ${PKG_URL} ${TMP_PKG_DIR}.tgz
+tar -xzf ${TMP_PKG_DIR}.tgz -C ${TMP_PKG_DIR}
 EXIT_CODE=$?
 if [[ EXIT_CODE -ne 0 ]]; then
-  echo "jenkins: tar xzf failed ${PKG_PATH} ${TARGET_PATH}..."
-  echo "jenkins: clear pkg ${PKG_PATH}..."
-  rm -f ${PKG_PATH}
-  exit 1
+	echo "gocd: download program tgz failed ${PROG_URL}..."
+	exit 1
 fi
+rm -f ${TMP_PKG_DIR}.tgz
 
-rm -f ${PKG_PATH}
-
-export ${ENV_VAR}
+#同步程序包
+rsync -av ${TMP_PKG_DIR}/  ${TARGET_PATH}
+rm -rf ${TMP_PKG_DIR}
 
 cd ${TARGET_PATH}
 
+export ${ENV_VAR}
 /bin/bash ${RUN_CMD}
 `
