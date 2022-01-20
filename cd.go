@@ -17,27 +17,10 @@ const (
 )
 
 type CdServer struct {
-	jenkins       *gojenkins.Jenkins
-	env           string
-	defCdNodeInfo *CdNodeInfo
-	s3Info        *CdS3Info
-}
-
-type CdNodeInfo struct {
-	credentialsId string
-	jvmOptions    string
-	numExecutors  int
-	remoteFs      string
-	sshPort       string
-}
-
-type CdS3Info struct {
-	s3AK         string
-	s3SK         string
-	s3Endpoint   string
-	s3Bucket     string
-	s3Region     string
-	s3GetToolUrl string
+	jenkins        *gojenkins.Jenkins
+	env            string
+	defCdNodeParam *CdNodeParam
+	s3Info         *CdS3Info
 }
 
 //todo service
@@ -49,7 +32,6 @@ type CdServiceInfo struct {
 }
 
 type DeployParam struct {
-	//PkgVersion string
 	EnvVar map[string]string
 
 	PkgUrl     string
@@ -80,19 +62,19 @@ func NewCdServer(ctx context.Context, url, username, token string, options ...Cd
 		}
 	}
 
-	if cdServer.defCdNodeInfo == nil {
-		cdServer.defCdNodeInfo = NewCdNodeInfo()
+	if cdServer.defCdNodeParam == nil {
+		cdServer.defCdNodeParam = NewCdNodeParam()
 	}
 
 	return cdServer
 }
 
-//最好使用内网IP todo 如果是内网IP 不同环境可能重复!
+//最好使用内网IP
 func (j *CdServer) CreateNode(ctx context.Context, ip, remark string, options ...CdNodeOption) error {
-	cdNodeInfo := j.defCdNodeInfo
+	cdNodeInfo := j.defCdNodeParam
 	if len(options) > 0 {
-		cdNodeInfo = &CdNodeInfo{}
-		*cdNodeInfo = *j.defCdNodeInfo
+		cdNodeInfo = &CdNodeParam{}
+		*cdNodeInfo = *j.defCdNodeParam
 
 		for _, option := range options {
 			option(cdNodeInfo)
@@ -116,17 +98,30 @@ func (j *CdServer) CreateNode(ctx context.Context, ip, remark string, options ..
 	return nil
 }
 
-func (j *CdServer) UpdateNode(ctx context.Context, ip string) error {
-	//node, err := j.jenkins.GetNode(ctx, ip)
-	//if err != nil {
-	//	return err
-	//}
+func (j *CdServer) DeleteNode(ctx context.Context, ip string) (bool, error) {
+	node, err := j.jenkins.GetNode(ctx, ip)
+	if err != nil {
+		return false, err
+	}
 
-	//node.
-	return nil
+	return node.Delete(ctx)
 }
 
-//todo
+func (j *CdServer) GetAllNodes(ctx context.Context) ([]*gojenkins.Node, error) {
+	nodes, err := j.jenkins.GetAllNodes(ctx)
+
+	envNodes := make([]*gojenkins.Node, 0, len(nodes))
+	for _, node := range nodes {
+		if !strings.HasPrefix(node.Raw.Description, j.env) {
+			continue
+		}
+
+		envNodes = append(envNodes, node)
+	}
+
+	return envNodes, err
+}
+
 func (j *CdServer) GetNode(ctx context.Context, ip string) (*gojenkins.Node, error) {
 	return j.jenkins.GetNode(ctx, ip)
 }
@@ -158,16 +153,6 @@ func (j *CdServer) getOrCreateJob(ctx context.Context, name, ip string) (*gojenk
 	return job, nil
 }
 
-func (j *CdServer) s3Env() map[string]string {
-	return map[string]string{
-		"GOCD_S3_AK":       j.s3Info.s3AK,
-		"GOCD_S3_SK":       j.s3Info.s3SK,
-		"GOCD_S3_ENDPOINT": j.s3Info.s3Endpoint,
-		"GOCD_S3_BUCKET":   j.s3Info.s3Bucket,
-		"GOCD_S3_REGION":   j.s3Info.s3Region,
-	}
-}
-
 //程序运行配置中，抽提db信息放到环境变量中运行时传递
 //不同环境的配置文件直接写入程序包,动态内容使用环境变量设置
 //部署类型支持http?
@@ -179,7 +164,7 @@ func (j *CdServer) Deploy(ctx context.Context, name, ip string, param *DeployPar
 
 	//s3get env
 	var s3EnvsStr strings.Builder
-	for key, value := range j.s3Env() {
+	for key, value := range j.s3Info.envVar() {
 		s3EnvsStr.WriteString(fmt.Sprintf(" %v=%v", key, value))
 	}
 
