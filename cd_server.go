@@ -23,22 +23,6 @@ type CdServer struct {
 	s3Info         *CdS3Info
 }
 
-//todo service
-type CdServiceInfo struct {
-	PkgUrl     string
-	TargetPath string
-	RunCmd     string
-	Script     string
-}
-
-type DeployParam struct {
-	EnvVar map[string]string
-
-	PkgUrl     string
-	TargetPath string
-	RunCmd     string
-}
-
 type DeployResult struct {
 	Status        int
 	Result        string
@@ -126,13 +110,13 @@ func (j *CdServer) GetNode(ctx context.Context, ip string) (*gojenkins.Node, err
 	return j.jenkins.GetNode(ctx, ip)
 }
 
-func (j *CdServer) getOrCreateJob(ctx context.Context, scriptVer, name, ip string) (*gojenkins.Job, error) {
-	jobName := fmt.Sprintf("%v-%v-%v-%v", scriptVer, j.env, name, ip)
+func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, ip string) (*gojenkins.Job, error) {
+	jobName := fmt.Sprintf("%v-%v-%v-%v", service.cdScript.scriptVersion, j.env, service.Name(), ip)
 
 	job, err := j.jenkins.GetJob(ctx, jobName)
 	if err != nil {
-		taskConfig := "" //getCdTaskConfig(ip)
-		fmt.Println(taskConfig)
+		taskConfig, err := service.GetCdTaskScriptConfig(ip)
+		//fmt.Println(taskConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -157,8 +141,8 @@ func (j *CdServer) getOrCreateJob(ctx context.Context, scriptVer, name, ip strin
 //不同环境的配置文件直接写入程序包,动态内容使用环境变量设置
 //部署类型支持http?
 // Deploy(*CdService,*CdNode) CdService包含DeployParam参数？
-func (j *CdServer) Deploy(ctx context.Context, scriptVer, name, ip string, param *DeployParam) (int64, error) {
-	job, err := j.getOrCreateJob(ctx, scriptVer, name, ip)
+func (j *CdServer) Deploy(ctx context.Context, service *CdService, ip string) (int64, error) {
+	job, err := j.getOrCreateJob(ctx, service, ip)
 	if err != nil {
 		return 0, err
 	}
@@ -169,8 +153,10 @@ func (j *CdServer) Deploy(ctx context.Context, scriptVer, name, ip string, param
 		s3EnvsStr.WriteString(fmt.Sprintf(" %v=%v", key, value))
 	}
 
+	//动态参数
+	envVar := service.EnvVar()
 	var envsStr strings.Builder
-	for key, value := range param.EnvVar {
+	for key, value := range envVar {
 		envsStr.WriteString(fmt.Sprintf(" %v=%v", key, value))
 	}
 
@@ -179,9 +165,9 @@ func (j *CdServer) Deploy(ctx context.Context, scriptVer, name, ip string, param
 		"HOST_IP":     ip,
 		"S3GET_URL":   j.s3Info.s3GetToolUrl,
 		"S3ENV_VAR":   s3EnvsStr.String(),
-		"PKG_URL":     param.PkgUrl, //s3get download package
-		"TARGET_PATH": param.TargetPath,
-		"RUN_CMD":     param.RunCmd,
+		"PKG_URL":     service.PkgUrl(), //s3get download package
+		"TARGET_PATH": service.TargetPath(),
+		"RUN_CMD":     service.RunCmd(),
 		"ENV_VAR":     envsStr.String(),
 	}
 

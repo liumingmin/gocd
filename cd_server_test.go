@@ -27,16 +27,12 @@ func getJServer() *CdServer {
 }
 
 func TestDeploy(t *testing.T) {
-	taskId, _ := getJServer().Deploy(context.Background(), "1", "test", "master", &DeployParam{
-		PkgUrl:     "pkg.tgz", //http://10.11.244.107/pkg.tgz
-		TargetPath: "/tmp/test",
-		RunCmd:     "run.sh",
-		EnvVar: map[string]string{
-			"A": "1",
-			"B": "2",
-			"C": "3",
-		},
+	service := NewDefaultCdService("test", "pkg.tgz", "/tmp/test", "run.sh", map[string]string{
+		"A": "1",
+		"B": "2",
+		"C": "3",
 	})
+	taskId, _ := getJServer().Deploy(context.Background(), service, "master")
 
 	t.Log(taskId)
 	//server.getOrCreateJob(context.Background(), "test", "master")
