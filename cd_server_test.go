@@ -13,16 +13,20 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
+const testLocalIp = "10.11.244.87"
+const testUsername = "admin"
+const testToken = "116e908012f0e76a71c788619470681f83" //admin
+
 func getJServer() *CdServer {
 	//http://127.0.0.1:8091/user/admin/configure 获取apitoken
-	return NewCdServer(context.Background(), "http://127.0.0.1:8091/", "admin", "116e908012f0e76a71c788619470681f83",
+	return NewCdServer(context.Background(), "http://"+testLocalIp+":8091/", testUsername, testToken,
 		CdServerEnvOption("prod"), CdServerS3Option(
 			"Vg6p9p/WM55ZbiZkE8Vyzw==",
 			"r0yRc7Yxc0fB7yWRoaWJrvLlC3hShtqBFfqj13PKTLo=",
-			"http://192.168.0.109:9005",
+			"http://"+testLocalIp+":9005",
 			"test",
 			"zh-south-1",
-			"http://192.168.0.109/s3get.tgz",
+			"http://"+testLocalIp+"/s3get.tgz", //s3get工具http下载地址
 		))
 }
 
@@ -35,18 +39,11 @@ func TestDeploy(t *testing.T) {
 	taskId, _ := getJServer().Deploy(context.Background(), service, "master")
 
 	t.Log(taskId)
-	//server.getOrCreateJob(context.Background(), "test", "master")
+
 }
 
-//func TestGetJobRaw(t *testing.T) {
-//	server := NewCdServer(context.Background(), "http://127.0.0.1:8091/", "admin", "admin",
-//		CdServerEnvOption("prod"))
-//	job, _ := server.getOrCreateJob(context.Background(), "test", "master")
-//	fmt.Println(job.GetConfig(context.Background()))
-//}
-
 func TestGetTaskBuild(t *testing.T) {
-	build, _ := getJServer().GetDeployResult(context.Background(), "test", "master", 18)
+	build, _ := getJServer().GetDeployResult(context.Background(), "test", "master", 25)
 	bs, _ := json.Marshal(build)
 	t.Log(string(bs))
 }

@@ -2,7 +2,7 @@ package gocd
 
 type CdService struct {
 	name       string
-	pkgUrl     string            // 程序包地址
+	pkgUrl     string            // 程序包名，defaultScript仅支持tgz格式程序包
 	targetPath string            // 服务部署目标目录
 	runCmd     string            // 启动文件或命令
 	envVar     map[string]string // 动态参数-通过环境变量传递

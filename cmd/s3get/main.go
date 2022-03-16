@@ -1,5 +1,7 @@
 package main
 
+//GOOS=linux GOARCH=amd64 go build -v --tags netgo -ldflags '-s -w -extldflags "-static"' -o s3get main.go
+//tar -czf s3get.tgz s3get
 import (
 	"fmt"
 	"os"

@@ -139,8 +139,6 @@ func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, ip st
 
 //程序运行配置中，抽提db信息放到环境变量中运行时传递
 //不同环境的配置文件直接写入程序包,动态内容使用环境变量设置
-//部署类型支持http?
-// Deploy(*CdService,*CdNode) CdService包含DeployParam参数？
 func (j *CdServer) Deploy(ctx context.Context, service *CdService, ip string) (int64, error) {
 	job, err := j.getOrCreateJob(ctx, service, ip)
 	if err != nil {
