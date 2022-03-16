@@ -27,7 +27,7 @@ func getJServer() *CdServer {
 }
 
 func TestDeploy(t *testing.T) {
-	taskId, _ := getJServer().Deploy(context.Background(), "test", "master", &DeployParam{
+	taskId, _ := getJServer().Deploy(context.Background(), "1", "test", "master", &DeployParam{
 		PkgUrl:     "pkg.tgz", //http://10.11.244.107/pkg.tgz
 		TargetPath: "/tmp/test",
 		RunCmd:     "run.sh",
@@ -83,4 +83,10 @@ func TestS3Get(t *testing.T) {
 	}
 
 	//ioutil.WriteFile("./pkg.tgz", buffer.Bytes(), 0666)
+}
+
+func TestNewDefaultCdScript(t *testing.T) {
+	cdScript := NewDefaultCdScript()
+	scriptConfig, _ := cdScript.GetCdTaskScriptConfig("127.0.0.1")
+	t.Log(scriptConfig)
 }

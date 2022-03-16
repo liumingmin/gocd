@@ -3,6 +3,8 @@ golang continue deploy
 
 cdserver
 cdnode  node manage  creds?
-cdservice  bind script?
+cdscript
+cdservice  bind script? 
+
 
 binary from aws s3(minio)

@@ -126,12 +126,12 @@ func (j *CdServer) GetNode(ctx context.Context, ip string) (*gojenkins.Node, err
 	return j.jenkins.GetNode(ctx, ip)
 }
 
-func (j *CdServer) getOrCreateJob(ctx context.Context, name, ip string) (*gojenkins.Job, error) {
-	jobName := fmt.Sprintf("%v-%v-%v", j.env, name, ip)
+func (j *CdServer) getOrCreateJob(ctx context.Context, scriptVer, name, ip string) (*gojenkins.Job, error) {
+	jobName := fmt.Sprintf("%v-%v-%v-%v", scriptVer, j.env, name, ip)
 
 	job, err := j.jenkins.GetJob(ctx, jobName)
 	if err != nil {
-		taskConfig, err := getCdTaskConfig(ip)
+		taskConfig := "" //getCdTaskConfig(ip)
 		fmt.Println(taskConfig)
 		if err != nil {
 			return nil, err
@@ -156,8 +156,9 @@ func (j *CdServer) getOrCreateJob(ctx context.Context, name, ip string) (*gojenk
 //程序运行配置中，抽提db信息放到环境变量中运行时传递
 //不同环境的配置文件直接写入程序包,动态内容使用环境变量设置
 //部署类型支持http?
-func (j *CdServer) Deploy(ctx context.Context, name, ip string, param *DeployParam) (int64, error) {
-	job, err := j.getOrCreateJob(ctx, name, ip)
+// Deploy(*CdService,*CdNode) CdService包含DeployParam参数？
+func (j *CdServer) Deploy(ctx context.Context, scriptVer, name, ip string, param *DeployParam) (int64, error) {
+	job, err := j.getOrCreateJob(ctx, scriptVer, name, ip)
 	if err != nil {
 		return 0, err
 	}

@@ -8,82 +8,67 @@ import (
 	"github.com/liumingmin/goutils/log"
 )
 
-var (
-	taskDef      *TaskDef
-	taskTemplate *template.Template
-)
-
-type ParameterDef struct {
+type CdScriptParamDef struct {
 	Name         string
 	Description  string
 	DefaultValue string
 }
 
-type TaskDef struct {
-	ParameterDefs []*ParameterDef
+type CdScript struct {
+	scriptParamDefs []*CdScriptParamDef
+	scriptTemplate  *template.Template
+
+	scriptContent string
+	scriptVersion int
+}
+
+type cdScriptInstance struct {
+	ParameterDefs []*CdScriptParamDef
 	ScriptContent string
+	HostIp        string
 }
 
-type NodeTaskDef struct {
-	*TaskDef
-	HostIp string
-}
-
-func getCdTaskConfig(hostIp string) (string, error) {
-	nodeTaskDef := &NodeTaskDef{HostIp: hostIp, TaskDef: taskDef}
+func (t *CdScript) GetCdTaskScriptConfig(hostIp string) (string, error) {
+	nodeTaskDef := &cdScriptInstance{HostIp: hostIp, ParameterDefs: t.scriptParamDefs, ScriptContent: t.scriptContent}
 	buf := new(bytes.Buffer)
-	err := taskTemplate.Execute(buf, nodeTaskDef)
+	err := t.scriptTemplate.Execute(buf, nodeTaskDef)
 	if err != nil {
 		return "", err
 	}
 	return buf.String(), nil
 }
 
-func initTaskDef() {
-	taskDef = &TaskDef{
-		ParameterDefs: []*ParameterDef{
-			{
-				Name:         "RUN_ENV",
-				DefaultValue: "dev",
-			},
-			{
-				Name: "S3GET_URL",
-			},
-			{
-				Name: "S3ENV_VAR",
-			},
-			{
-				Name: "PKG_URL",
-			},
-			{
-				Name: "TARGET_PATH",
-			},
-			{
-				Name: "RUN_CMD",
-			},
-			{
-				Name: "ENV_VAR",
-			},
-		},
-		ScriptContent: defaultTaskScript,
-	}
-}
-
-func initTaskTpl() {
-	tmpl, err := template.New("defaultTaskTpl").Parse(TASK_TPL)
+func NewCdScript(scriptParamDefs []*CdScriptParamDef, scriptXmlTpl, scriptContent string, scriptVersion int) *CdScript {
+	tmpl, err := template.New("defaultTaskTpl").Parse(scriptXmlTpl)
 	if err != nil {
 		log.Error(context.Background(), "parse tpl failed, err: %v", err)
-		return
+		return nil
 	}
-	taskTemplate = tmpl
+
+	return &CdScript{
+		scriptParamDefs: scriptParamDefs,
+		scriptTemplate:  tmpl,
+		scriptContent:   scriptContent,
+		scriptVersion:   scriptVersion,
+	}
 }
 
-func init() {
-	initTaskTpl()
-	initTaskDef()
+func NewDefaultCdScript() *CdScript {
+	scriptParamDefs := make([]*CdScriptParamDef, 0)
+	scriptParamDefs = append(scriptParamDefs, &CdScriptParamDef{
+		Name:         "RUN_ENV",
+		DefaultValue: "dev",
+	})
+	paramNames := []string{"S3GET_URL", "S3ENV_VAR", "PKG_URL", "TARGET_PATH", "RUN_CMD", "ENV_VAR"}
+	for _, paramName := range paramNames {
+		scriptParamDefs = append(scriptParamDefs, &CdScriptParamDef{
+			Name: paramName,
+		})
+	}
+	return NewCdScript(scriptParamDefs, defaultXmlTpl, defaultTaskScript, defaultTaskScriptVer)
 }
 
-const TASK_TPL = `<?xml version='1.1' encoding='UTF-8'?>
+const defaultXmlTpl = `<?xml version='1.1' encoding='UTF-8'?>
 <project>
   <actions/>
   <description></description>
@@ -122,6 +107,8 @@ const TASK_TPL = `<?xml version='1.1' encoding='UTF-8'?>
   <publishers/>
   <buildWrappers/>
 </project>`
+
+const defaultTaskScriptVer = 1
 
 const defaultTaskScript = `#!/bin/bash -il
 #jenkins内置参数
