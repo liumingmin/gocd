@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
-const testLocalIp = "10.11.244.87"
+const testLocalIp = "192.168.0.112"
 const testUsername = "admin"
 const testToken = "116e908012f0e76a71c788619470681f83" //admin
 
@@ -30,13 +30,18 @@ func getJServer() *CdServer {
 		))
 }
 
+func TestCreateNode(t *testing.T) {
+	err := getJServer().CreateNode(context.Background(), "172.17.0.3", "172.17.0.3_2", CdNodeCredIdOption("defssh"))
+	t.Log(err)
+}
+
 func TestDeploy(t *testing.T) {
 	service := NewDefaultCdService("test", "pkg.tgz", "/tmp/test", "run.sh", map[string]string{
 		"A": "1",
 		"B": "2",
 		"C": "3",
 	})
-	taskId, _ := getJServer().Deploy(context.Background(), service, "master")
+	taskId, _ := getJServer().Deploy(context.Background(), service, "172.17.0.3")
 
 	t.Log(taskId)
 
