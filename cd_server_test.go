@@ -3,7 +3,9 @@ package gocd
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -13,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
-const testLocalIp = "192.168.0.112"
+const testLocalIp = "10.11.244.87" //"192.168.0.112"
 const testUsername = "admin"
 const testToken = "116e908012f0e76a71c788619470681f83" //admin
 
@@ -36,15 +38,19 @@ func TestCreateNode(t *testing.T) {
 }
 
 func TestDeploy(t *testing.T) {
-	service := NewDefaultCdService("test", "pkg.tgz", "/tmp/test", "run.sh", map[string]string{
-		"A": "1",
-		"B": "2",
-		"C": "3",
-	})
-	taskId, _ := getJServer().Deploy(context.Background(), service, "172.17.0.3")
+	jserver := getJServer()
+	for i := 0; i < 10; i++ {
+		service := NewDefaultCdService("test"+strconv.Itoa(i), "pkg.tgz", "/tmp/test", "run.sh", map[string]string{
+			"A": "1",
+			"B": "2",
+			"C": "3",
+		})
+		taskId, _ := jserver.Deploy(context.Background(), service, "master") //172.17.0.3
 
-	t.Log(taskId)
+		fmt.Println(taskId)
 
+		//time.Sleep(time.Second)
+	}
 }
 
 func TestGetTaskBuild(t *testing.T) {
