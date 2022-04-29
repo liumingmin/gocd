@@ -7,8 +7,12 @@ type CdService struct {
 	runCmd     string            // 启动文件或命令
 	envVar     map[string]string // 动态参数-通过环境变量传递
 	cdScript   *CdScript
+
+	deployCounter uint32
 }
 
+//程序运行配置中，抽提db信息放到环境变量中运行时传递
+//不同环境的配置文件直接写入程序包,动态内容使用环境变量设置
 func NewDefaultCdService(name, pkgUrl, targetPath, runCmd string, envVar map[string]string) *CdService {
 	if envVar == nil {
 		envVar = make(map[string]string)

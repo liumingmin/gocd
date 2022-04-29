@@ -2,8 +2,10 @@ package gocd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/liumingmin/gojenkins"
@@ -21,6 +23,9 @@ type CdServer struct {
 	env            string
 	defCdNodeParam *CdNodeParam
 	s3Info         *CdS3Info
+
+	nodesCache map[string]*gojenkins.Node
+	svcCache   map[string]*CdService
 }
 
 type DeployResult struct {
@@ -50,7 +55,33 @@ func NewCdServer(ctx context.Context, url, username, token string, options ...Cd
 		cdServer.defCdNodeParam = NewCdNodeParam()
 	}
 
+	cdServer.updateNodeCache(ctx)
+	cdServer.svcCache = make(map[string]*CdService)
 	return cdServer
+}
+
+func (j *CdServer) AddService(ctx context.Context, svc *CdService) {
+	j.svcCache[svc.Name()] = svc
+}
+
+func (j *CdServer) getServiceByName(name string) *CdService {
+	svc, ok := j.svcCache[name]
+	if ok {
+		return svc
+	}
+	return nil
+}
+
+func (j *CdServer) updateNodeCache(ctx context.Context) {
+	j.nodesCache, _ = j.getAllNodesMap(ctx)
+}
+
+func (j *CdServer) getNodeByName(name string) *gojenkins.Node {
+	node, ok := j.nodesCache[name]
+	if ok {
+		return node
+	}
+	return nil
 }
 
 //最好使用内网IP
@@ -78,6 +109,8 @@ func (j *CdServer) CreateNode(ctx context.Context, ip, remark string, options ..
 		log.Error(ctx, "CreateNode failed, err: %v", err)
 		return err
 	}
+
+	j.updateNodeCache(ctx)
 	log.Info(ctx, "CreateNode: %v", node)
 	return nil
 }
@@ -88,34 +121,56 @@ func (j *CdServer) DeleteNode(ctx context.Context, ip string) (bool, error) {
 		return false, err
 	}
 
-	return node.Delete(ctx)
+	ok, err := node.Delete(ctx)
+	if err != nil {
+		log.Error(ctx, "DeleteNode failed, err: %v", err)
+	}
+
+	if err == nil && ok {
+		j.updateNodeCache(ctx)
+	}
+	return ok, err
 }
 
-func (j *CdServer) GetAllNodes(ctx context.Context) ([]*gojenkins.Node, error) {
+func (j *CdServer) getAllNodes(ctx context.Context) ([]*gojenkins.Node, error) {
 	nodes, err := j.jenkins.GetAllNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	envNodes := make([]*gojenkins.Node, 0, len(nodes))
 	for _, node := range nodes {
-		if !strings.HasPrefix(node.Raw.Description, j.env) {
+		if !strings.HasPrefix(node.Raw.Description, j.env) && node.Raw.DisplayName != "master" {
 			continue
 		}
 
 		envNodes = append(envNodes, node)
 	}
 
-	return envNodes, err
+	return envNodes, nil
 }
 
-func (j *CdServer) GetNode(ctx context.Context, ip string) (*gojenkins.Node, error) {
-	return j.jenkins.GetNode(ctx, ip)
+func (j *CdServer) getAllNodesMap(ctx context.Context) (map[string]*gojenkins.Node, error) {
+	nodes, err := j.getAllNodes(ctx)
+	if err != nil {
+		return make(map[string]*gojenkins.Node), err
+	}
+
+	nodesMap := make(map[string]*gojenkins.Node)
+	for _, node := range nodes {
+		nodesMap[node.GetName()] = node
+	}
+	return nodesMap, nil
 }
 
-func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, ip string) (*gojenkins.Job, error) {
-	jobName := fmt.Sprintf("%v-%v-%v-%v", service.cdScript.scriptVersion, j.env, service.Name(), ip)
+func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, node *gojenkins.Node) (*gojenkins.Job, error) {
+	cnt := atomic.AddUint32(&service.deployCounter, 1)
+	idx := int64(cnt) % node.Raw.NumExecutors
+	jobName := fmt.Sprintf("%v-%v-%v-%v-%v", service.cdScript.scriptVersion, j.env, service.Name(), node.GetName(), idx)
 
 	job, err := j.jenkins.GetJob(ctx, jobName)
 	if err != nil {
-		taskConfig, err := service.GetCdTaskScriptConfig(ip)
+		taskConfig, err := service.GetCdTaskScriptConfig(node.GetName())
 		//fmt.Println(taskConfig)
 		if err != nil {
 			return nil, err
@@ -137,10 +192,22 @@ func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, ip st
 	return job, nil
 }
 
-//程序运行配置中，抽提db信息放到环境变量中运行时传递
-//不同环境的配置文件直接写入程序包,动态内容使用环境变量设置
-func (j *CdServer) Deploy(ctx context.Context, service *CdService, ip string) (int64, error) {
-	job, err := j.getOrCreateJob(ctx, service, ip)
+func (j *CdServer) DeploySimple(ctx context.Context, svcName, nodeName string) (int64, error) {
+	svc := j.getServiceByName(svcName)
+	if svc == nil {
+		return 0, errors.New("not found svc")
+	}
+
+	node := j.getNodeByName(nodeName)
+	if node == nil {
+		return 0, errors.New("not found node")
+	}
+
+	return j.deploy(ctx, svc, node)
+}
+
+func (j *CdServer) deploy(ctx context.Context, service *CdService, node *gojenkins.Node) (int64, error) {
+	job, err := j.getOrCreateJob(ctx, service, node)
 	if err != nil {
 		return 0, err
 	}
@@ -160,7 +227,6 @@ func (j *CdServer) Deploy(ctx context.Context, service *CdService, ip string) (i
 
 	params := map[string]string{
 		"RUN_ENV":     j.env,
-		"HOST_IP":     ip,
 		"S3GET_URL":   j.s3Info.s3GetToolUrl,
 		"S3ENV_VAR":   s3EnvsStr.String(),
 		"PKG_URL":     service.PkgUrl(), //s3get download package
