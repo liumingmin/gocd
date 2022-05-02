@@ -60,7 +60,7 @@ func NewCdServer(ctx context.Context, url, username, token string, options ...Cd
 	return cdServer
 }
 
-func (j *CdServer) AddService(ctx context.Context, svc *CdService) {
+func (j *CdServer) AddService(svc *CdService) {
 	j.svcCache[svc.Name()] = svc
 }
 
@@ -223,21 +223,16 @@ func (j *CdServer) deploy(ctx context.Context, service *CdService, node *gojenki
 		s3EnvsStr.WriteString(fmt.Sprintf(" %v=%v", key, value))
 	}
 
-	//动态参数
-	envVar := service.EnvVar()
-	var envsStr strings.Builder
-	for key, value := range envVar {
-		envsStr.WriteString(fmt.Sprintf(" %v=%v", key, value))
+	params := map[string]string{
+		"RUN_ENV":   j.env,
+		"S3GET_URL": j.s3Info.s3GetToolUrl,
+		"S3ENV_VAR": s3EnvsStr.String(),
 	}
 
-	params := map[string]string{
-		"RUN_ENV":     j.env,
-		"S3GET_URL":   j.s3Info.s3GetToolUrl,
-		"S3ENV_VAR":   s3EnvsStr.String(),
-		"PKG_URL":     service.PkgUrl(), //s3get download package
-		"TARGET_PATH": service.TargetPath(),
-		"RUN_CMD":     service.RunCmd(),
-		"ENV_VAR":     envsStr.String(),
+	// service generate svc params
+	svcParams := service.GetParams()
+	for k, v := range svcParams {
+		params[k] = v
 	}
 
 	taskId, err := job.InvokeSimple(ctx, params)

@@ -35,7 +35,7 @@ func getCdServer() *CdServer {
 		"B": "2",
 		"C": "3",
 	})
-	cdServer.AddService(context.Background(), simpleSvc)
+	cdServer.AddService(simpleSvc)
 	return cdServer
 }
 

@@ -45,8 +45,20 @@ func NewCdScript(scriptParamDefs []*CdScriptParamDef, scriptXmlTpl, scriptConten
 		return nil
 	}
 
+	baseScriptParamDefs := make([]*CdScriptParamDef, 0)
+	baseScriptParamDefs = append(baseScriptParamDefs, &CdScriptParamDef{
+		Name:         "RUN_ENV",
+		DefaultValue: "dev",
+	})
+	baseScriptParamDefs = append(baseScriptParamDefs, &CdScriptParamDef{
+		Name: "S3GET_URL",
+	})
+	baseScriptParamDefs = append(baseScriptParamDefs, &CdScriptParamDef{
+		Name: "S3ENV_VAR",
+	})
+
 	return &CdScript{
-		scriptParamDefs: scriptParamDefs,
+		scriptParamDefs: append(baseScriptParamDefs, scriptParamDefs...),
 		scriptTemplate:  tmpl,
 		scriptContent:   scriptContent,
 		scriptVersion:   scriptVersion,
@@ -55,20 +67,16 @@ func NewCdScript(scriptParamDefs []*CdScriptParamDef, scriptXmlTpl, scriptConten
 
 func NewDefaultCdScript() *CdScript {
 	scriptParamDefs := make([]*CdScriptParamDef, 0)
-	scriptParamDefs = append(scriptParamDefs, &CdScriptParamDef{
-		Name:         "RUN_ENV",
-		DefaultValue: "dev",
-	})
-	paramNames := []string{"S3GET_URL", "S3ENV_VAR", "PKG_URL", "TARGET_PATH", "RUN_CMD", "ENV_VAR"}
+	paramNames := []string{"PKG_URL", "TARGET_PATH", "RUN_CMD", "ENV_VAR"}
 	for _, paramName := range paramNames {
 		scriptParamDefs = append(scriptParamDefs, &CdScriptParamDef{
 			Name: paramName,
 		})
 	}
-	return NewCdScript(scriptParamDefs, defaultXmlTpl, defaultTaskScript, defaultTaskScriptVer)
+	return NewCdScript(scriptParamDefs, DefaultXmlTpl, DefaultTaskScript, defaultTaskScriptVer)
 }
 
-const defaultXmlTpl = `<?xml version='1.1' encoding='UTF-8'?>
+const DefaultXmlTpl = `<?xml version='1.1' encoding='UTF-8'?>
 <project>
   <actions/>
   <description></description>
@@ -110,7 +118,7 @@ const defaultXmlTpl = `<?xml version='1.1' encoding='UTF-8'?>
 
 const defaultTaskScriptVer = 1
 
-const defaultTaskScript = `#!/bin/bash -il
+const DefaultTaskScript = `#!/bin/bash -il
 #jenkins内置参数
 #NODE_NAME
 
@@ -118,6 +126,8 @@ const defaultTaskScript = `#!/bin/bash -il
 #RUN_ENV 运行环境
 #S3GET_URL s3get工具下载地址
 #S3ENV_VAR s3get环境变量
+
+#服务参数
 #PKG_URL 程序包s3 key
 #TARGET_PATH 程序目录
 #RUN_CMD 运行脚本

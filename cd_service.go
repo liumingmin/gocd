@@ -1,5 +1,11 @@
 package gocd
 
+import (
+	"fmt"
+	"strings"
+)
+
+//todo 参数统一为map[string]string, 详细参数Default里面传
 type CdService struct {
 	name       string
 	pkgUrl     string            // 程序包名，defaultScript仅支持tgz格式程序包
@@ -53,4 +59,20 @@ func (t *CdService) BindScript(cdScript *CdScript) {
 
 func (t *CdService) GetCdTaskScriptConfig(hostIp string) (string, error) {
 	return t.cdScript.GetCdTaskScriptConfig(hostIp)
+}
+
+func (t *CdService) GetParams() map[string]string {
+	//动态参数
+	envVar := t.EnvVar()
+	var envsStr strings.Builder
+	for key, value := range envVar {
+		envsStr.WriteString(fmt.Sprintf(" %v=%v", key, value))
+	}
+
+	return map[string]string{
+		"PKG_URL":     t.PkgUrl(), //s3get download package
+		"TARGET_PATH": t.TargetPath(),
+		"RUN_CMD":     t.RunCmd(),
+		"ENV_VAR":     envsStr.String(),
+	}
 }
