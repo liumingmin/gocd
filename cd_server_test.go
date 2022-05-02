@@ -30,7 +30,7 @@ func getCdServer() *CdServer {
 			"http://"+testLocalIp+"/s3get.tgz", //s3get工具http下载地址
 		))
 
-	simpleSvc := NewDefaultCdService("test", "pkg.tgz", "/tmp/test", "run.sh", map[string]string{
+	simpleSvc := NewDefaultCdService("runit", "pkg.tgz", "/tmp/test", "run.sh", map[string]string{
 		"A": "1",
 		"B": "2",
 		"C": "3",
@@ -45,28 +45,36 @@ func TestGetNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Log(len(nodes))
+	for _, node := range nodes {
+		t.Log(node)
+	}
 }
 
 func TestCreateNode(t *testing.T) {
-	err := getCdServer().GetNodeBroker().CreateNode(context.Background(), "172.17.0.3", "172.17.0.3_2", CdNodeCredIdOption("defssh"))
+	err := getCdServer().GetNodeBroker().CreateNode(context.Background(), "172.17.0.4", "172.17.0.4",
+		CdNodeCredIdOption("defssh"), CdNodeNumExecutorsOption(5))
 	t.Log(err)
+}
+
+func TestDeleteNode(t *testing.T) {
+	ok, err := getCdServer().GetNodeBroker().DeleteNode(context.Background(), "172.17.0.4")
+	t.Log(ok, err)
 }
 
 func TestDeploy(t *testing.T) {
 	jserver := getCdServer()
 
-	for i := 0; i < 1; i++ {
-		taskId, _ := jserver.DeploySimple(context.Background(), "test", "master") //172.17.0.3
+	for i := 0; i < 4; i++ {
+		jobName, taskId, _ := jserver.DeploySimple(context.Background(), "runit", "172.17.0.4") //172.17.0.3
 
-		fmt.Println(taskId)
+		fmt.Println(jobName, taskId)
 
 		//time.Sleep(time.Second)
 	}
 }
 
 func TestGetTaskBuild(t *testing.T) {
-	build, _ := getCdServer().GetDeployResult(context.Background(), "test", "master", 25)
+	build, _ := getCdServer().GetDeployResult(context.Background(), "1-prod-runit-172.17.0.4-0", 131)
 	bs, _ := json.Marshal(build)
 	t.Log(string(bs))
 }

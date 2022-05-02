@@ -71,7 +71,7 @@ func (j *CdServer) getServiceByName(name string) *CdService {
 	return nil
 }
 
-func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, node *gojenkins.Node) (*gojenkins.Job, error) {
+func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, node *gojenkins.Node) (string, *gojenkins.Job, error) {
 	cnt := atomic.AddUint32(&service.deployCounter, 1)
 	idx := int64(cnt) % node.Raw.NumExecutors
 	jobName := fmt.Sprintf("%v-%v-%v-%v-%v", service.cdScript.scriptVersion, j.env, service.Name(), node.GetName(), idx)
@@ -81,13 +81,13 @@ func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, node 
 		taskConfig, err := service.GetCdTaskScriptConfig(node.GetName())
 		//fmt.Println(taskConfig)
 		if err != nil {
-			return nil, err
+			return jobName, nil, err
 		}
 
 		_, err = j.jenkins.CreateJob(ctx, taskConfig, jobName)
 		if err != nil {
 			log.Error(ctx, "CreateJob failed: %v, err: %v", jobName, err)
-			return nil, err
+			return jobName, nil, err
 		}
 
 		for i := 0; i < 3; i++ {
@@ -102,27 +102,27 @@ func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, node 
 			break
 		}
 	}
-	return job, nil
+	return jobName, job, nil
 }
 
-func (j *CdServer) DeploySimple(ctx context.Context, svcName, nodeName string) (int64, error) {
+func (j *CdServer) DeploySimple(ctx context.Context, svcName, nodeName string) (string, int64, error) {
 	svc := j.getServiceByName(svcName)
 	if svc == nil {
-		return 0, errors.New("not found svc")
+		return "", 0, errors.New("not found svc")
 	}
 
 	node := j.nodeBroker.getNodeByName(nodeName)
 	if node == nil {
-		return 0, errors.New("not found node")
+		return "", 0, errors.New("not found node")
 	}
 
 	return j.deploy(ctx, svc, node)
 }
 
-func (j *CdServer) deploy(ctx context.Context, service *CdService, node *gojenkins.Node) (int64, error) {
-	job, err := j.getOrCreateJob(ctx, service, node)
+func (j *CdServer) deploy(ctx context.Context, service *CdService, node *gojenkins.Node) (string, int64, error) {
+	jobName, job, err := j.getOrCreateJob(ctx, service, node)
 	if err != nil {
-		return 0, err
+		return jobName, 0, err
 	}
 
 	//s3get env
@@ -146,15 +146,13 @@ func (j *CdServer) deploy(ctx context.Context, service *CdService, node *gojenki
 	taskId, err := job.InvokeSimple(ctx, params)
 	if err != nil {
 		log.Error(ctx, "job build failed: %v", err)
-		return 0, err
+		return jobName, 0, err
 	}
 
-	return taskId, nil
+	return jobName, taskId, nil
 }
 
-func (j *CdServer) GetDeployResult(ctx context.Context, name, ip string, taskId int64) (*DeployResult, error) {
-	jobName := fmt.Sprintf("%v-%v-%v", j.env, name, ip)
-
+func (j *CdServer) GetDeployResult(ctx context.Context, jobName string, taskId int64) (*DeployResult, error) {
 	job, err := j.jenkins.GetJob(ctx, jobName)
 	if err != nil {
 		log.Error(ctx, "get job from jenkins failed: %v, err: %v", jobName, err)

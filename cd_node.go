@@ -28,6 +28,8 @@ func NewCdNodeBroker(jenkins *gojenkins.Jenkins, env string, nodeParam *CdNodePa
 	if cdNodeBroker.defCdNodeParam == nil {
 		cdNodeBroker.defCdNodeParam = NewCdNodeParam()
 	}
+
+	cdNodeBroker.updateNodeCache(context.Background())
 	return cdNodeBroker
 }
 
