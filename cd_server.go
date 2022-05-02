@@ -19,12 +19,11 @@ const (
 )
 
 type CdServer struct {
-	jenkins        *gojenkins.Jenkins
-	env            string
-	defCdNodeParam *CdNodeParam
-	s3Info         *CdS3Info
+	jenkins *gojenkins.Jenkins
+	env     string
+	s3Info  *CdS3Info
 
-	nodesCache map[string]*gojenkins.Node
+	nodeBroker *CdNodeBroker
 	svcCache   map[string]*CdService
 }
 
@@ -34,15 +33,17 @@ type DeployResult struct {
 	ConsoleOutput string
 }
 
-func NewCdServer(ctx context.Context, url, username, token string, options ...CdServerOption) *CdServer {
+func NewCdServer(ctx context.Context, url, username, token, env string, options ...CdServerOption) *CdServer {
 	jenkins := gojenkins.CreateJenkins(nil, url, username, token)
 	_, err := jenkins.Init(ctx)
 	if err != nil {
 		log.Error(ctx, "jenkins init failed, err: %v", err)
 	}
 	cdServer := &CdServer{
-		jenkins: jenkins,
-		env:     "dev",
+		jenkins:    jenkins,
+		env:        env,
+		nodeBroker: NewCdNodeBroker(jenkins, env, nil),
+		svcCache:   make(map[string]*CdService),
 	}
 
 	if len(options) > 0 {
@@ -51,13 +52,11 @@ func NewCdServer(ctx context.Context, url, username, token string, options ...Cd
 		}
 	}
 
-	if cdServer.defCdNodeParam == nil {
-		cdServer.defCdNodeParam = NewCdNodeParam()
-	}
-
-	cdServer.updateNodeCache(ctx)
-	cdServer.svcCache = make(map[string]*CdService)
 	return cdServer
+}
+
+func (j *CdServer) GetNodeBroker() *CdNodeBroker {
+	return j.nodeBroker
 }
 
 func (j *CdServer) AddService(svc *CdService) {
@@ -70,97 +69,6 @@ func (j *CdServer) getServiceByName(name string) *CdService {
 		return svc
 	}
 	return nil
-}
-
-func (j *CdServer) updateNodeCache(ctx context.Context) {
-	j.nodesCache, _ = j.getAllNodesMap(ctx)
-}
-
-func (j *CdServer) getNodeByName(name string) *gojenkins.Node {
-	node, ok := j.nodesCache[name]
-	if ok {
-		return node
-	}
-	return nil
-}
-
-//最好使用内网IP
-func (j *CdServer) CreateNode(ctx context.Context, ip, remark string, options ...CdNodeOption) error {
-	cdNodeInfo := j.defCdNodeParam
-	if len(options) > 0 {
-		cdNodeInfo = &CdNodeParam{}
-		*cdNodeInfo = *j.defCdNodeParam
-
-		for _, option := range options {
-			option(cdNodeInfo)
-		}
-	}
-
-	desc := fmt.Sprintf("%v:(%v)%v", j.env, ip, remark)
-	node, err := j.jenkins.CreateNode(ctx, ip, cdNodeInfo.numExecutors, desc, cdNodeInfo.remoteFs, ip,
-		map[string]string{
-			"method":        "SSHLauncher",
-			"host":          ip,
-			"port":          cdNodeInfo.sshPort,
-			"credentialsId": cdNodeInfo.credentialsId,
-			"jvmOptions":    cdNodeInfo.jvmOptions,
-		})
-	if err != nil {
-		log.Error(ctx, "CreateNode failed, err: %v", err)
-		return err
-	}
-
-	j.updateNodeCache(ctx)
-	log.Info(ctx, "CreateNode: %v", node)
-	return nil
-}
-
-func (j *CdServer) DeleteNode(ctx context.Context, ip string) (bool, error) {
-	node, err := j.jenkins.GetNode(ctx, ip)
-	if err != nil {
-		return false, err
-	}
-
-	ok, err := node.Delete(ctx)
-	if err != nil {
-		log.Error(ctx, "DeleteNode failed, err: %v", err)
-	}
-
-	if err == nil && ok {
-		j.updateNodeCache(ctx)
-	}
-	return ok, err
-}
-
-func (j *CdServer) getAllNodes(ctx context.Context) ([]*gojenkins.Node, error) {
-	nodes, err := j.jenkins.GetAllNodes(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	envNodes := make([]*gojenkins.Node, 0, len(nodes))
-	for _, node := range nodes {
-		if !strings.HasPrefix(node.Raw.Description, j.env) && node.Raw.DisplayName != "master" {
-			continue
-		}
-
-		envNodes = append(envNodes, node)
-	}
-
-	return envNodes, nil
-}
-
-func (j *CdServer) getAllNodesMap(ctx context.Context) (map[string]*gojenkins.Node, error) {
-	nodes, err := j.getAllNodes(ctx)
-	if err != nil {
-		return make(map[string]*gojenkins.Node), err
-	}
-
-	nodesMap := make(map[string]*gojenkins.Node)
-	for _, node := range nodes {
-		nodesMap[node.GetName()] = node
-	}
-	return nodesMap, nil
 }
 
 func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, node *gojenkins.Node) (*gojenkins.Job, error) {
@@ -203,7 +111,7 @@ func (j *CdServer) DeploySimple(ctx context.Context, svcName, nodeName string) (
 		return 0, errors.New("not found svc")
 	}
 
-	node := j.getNodeByName(nodeName)
+	node := j.nodeBroker.getNodeByName(nodeName)
 	if node == nil {
 		return 0, errors.New("not found node")
 	}
@@ -276,4 +184,13 @@ func (j *CdServer) GetDeployResult(ctx context.Context, name, ip string, taskId 
 
 	log.Info(ctx, "get build result from jenkins  %v", taskBuild)
 	return taskBuild, nil
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+type CdServerOption func(*CdServer)
+
+func CdServerNodeOption(options ...CdNodeOption) CdServerOption {
+	return func(server *CdServer) {
+		server.nodeBroker.SetDefCdNodeParam(NewCdNodeParam(options...))
+	}
 }

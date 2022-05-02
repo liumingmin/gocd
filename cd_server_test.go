@@ -14,14 +14,14 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
-const testLocalIp = "10.11.244.87" //"192.168.0.112"
+const testLocalIp = "192.168.0.104" //
 const testUsername = "admin"
 const testToken = "116e908012f0e76a71c788619470681f83" //admin
 
 func getCdServer() *CdServer {
 	//http://127.0.0.1:8091/user/admin/configure 获取apitoken
-	cdServer := NewCdServer(context.Background(), "http://"+testLocalIp+":8091/", testUsername, testToken,
-		CdServerEnvOption("prod"), CdServerS3Option(
+	cdServer := NewCdServer(context.Background(), "http://"+testLocalIp+":8091/", testUsername, testToken, "prod",
+		CdServerS3Option(
 			"Vg6p9p/WM55ZbiZkE8Vyzw==",
 			"r0yRc7Yxc0fB7yWRoaWJrvLlC3hShtqBFfqj13PKTLo=",
 			"http://"+testLocalIp+":9005",
@@ -40,7 +40,7 @@ func getCdServer() *CdServer {
 }
 
 func TestGetNodes(t *testing.T) {
-	nodes, err := getCdServer().getAllNodes(context.Background())
+	nodes, err := getCdServer().GetNodeBroker().getAllNodes(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestGetNodes(t *testing.T) {
 }
 
 func TestCreateNode(t *testing.T) {
-	err := getCdServer().CreateNode(context.Background(), "172.17.0.3", "172.17.0.3_2", CdNodeCredIdOption("defssh"))
+	err := getCdServer().GetNodeBroker().CreateNode(context.Background(), "172.17.0.3", "172.17.0.3_2", CdNodeCredIdOption("defssh"))
 	t.Log(err)
 }
 
