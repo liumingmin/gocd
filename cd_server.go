@@ -181,12 +181,17 @@ func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, node 
 			log.Error(ctx, "CreateJob failed: %v, err: %v", jobName, err)
 			return nil, err
 		}
-		time.Sleep(time.Second * 3)
 
-		job, err = j.jenkins.GetJob(ctx, jobName)
-		if err != nil {
-			log.Error(ctx, "GetJob failed: %v, err: %v", jobName, err)
-			return nil, err
+		for i := 0; i < 3; i++ {
+			job, err = j.jenkins.GetJob(ctx, jobName)
+			if err != nil || job == nil {
+				log.Debug(ctx, "GetJob failed: %v, err: %v", jobName, err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			log.Info(ctx, "GetJob ok: %v", jobName)
+			break
 		}
 	}
 	return job, nil

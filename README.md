@@ -13,3 +13,6 @@ binary from aws s3(minio)
 
 next:
 cdserviceversion?  cdservicenode?
+
+jenkins concurrent run job may get same taskId(queueId), 
+so create same as num executor jobs to run
