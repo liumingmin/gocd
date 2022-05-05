@@ -29,7 +29,7 @@ func NewCdNodeBroker(jenkins *gojenkins.Jenkins, env string, nodeParam *CdNodePa
 		cdNodeBroker.defCdNodeParam = NewCdNodeParam()
 	}
 
-	cdNodeBroker.updateNodeCache(context.Background())
+	cdNodeBroker.UpdateNodeCache(context.Background())
 	return cdNodeBroker
 }
 
@@ -65,7 +65,7 @@ func (t *CdNodeBroker) CreateNode(ctx context.Context, ip, remark string, option
 		return err
 	}
 
-	t.updateNodeCache(ctx)
+	t.UpdateNodeCache(ctx)
 	log.Info(ctx, "CreateNode: %v", node)
 	return nil
 }
@@ -82,22 +82,22 @@ func (t *CdNodeBroker) DeleteNode(ctx context.Context, ip string) (bool, error) 
 	}
 
 	if err == nil && ok {
-		t.updateNodeCache(ctx)
+		t.UpdateNodeCache(ctx)
 	}
 	return ok, err
 }
 
-func (t *CdNodeBroker) updateNodeCache(ctx context.Context) error {
+func (t *CdNodeBroker) UpdateNodeCache(ctx context.Context) error {
 	cache, err := t.getAllNodesMap(ctx)
 	if err != nil || cache == nil {
-		log.Error(ctx, "updateNodeCache failed, err: %v", err)
+		log.Error(ctx, "UpdateNodeCache failed, err: %v", err)
 		return err
 	}
 	t.nodesCache = cache
 	return nil
 }
 
-func (t *CdNodeBroker) getNodeByName(name string) *gojenkins.Node {
+func (t *CdNodeBroker) GetNodeByName(name string) *gojenkins.Node {
 	node, ok := t.nodesCache[name]
 	if ok {
 		return node

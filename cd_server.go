@@ -111,7 +111,7 @@ func (j *CdServer) DeploySimple(ctx context.Context, svcName, nodeName string) (
 		return "", 0, errors.New("not found svc")
 	}
 
-	node := j.nodeBroker.getNodeByName(nodeName)
+	node := j.nodeBroker.GetNodeByName(nodeName)
 	if node == nil {
 		return "", 0, errors.New("not found node")
 	}
