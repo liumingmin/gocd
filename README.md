@@ -6,6 +6,8 @@ golang continue deploy
 <!-- toc -->
 
 - [cd_server_test.go usage](#cd_server_testgo-usage)
+- [cmd](#cmd)
+- [doc](#doc)
 
 <!-- tocstop -->
 
@@ -20,7 +22,7 @@ tips:
 ### TestGetNodes
 ```go
 
-	nodes, err := getCdServer().GetNodeBroker().getAllNodes(context.Background())
+	nodes, err := getTestCdServer().GetNodeBroker().getAllNodes(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,23 +34,23 @@ tips:
 ### TestCreateNode
 ```go
 
-	err := getCdServer().GetNodeBroker().CreateNode(context.Background(), "172.17.0.4", "172.17.0.4",
+	err := getTestCdServer().GetNodeBroker().CreateNode(context.Background(), "172.17.0.4", "172.17.0.4",
 		CdNodeCredIdOption("defssh"), CdNodeNumExecutorsOption(5))
 	t.Log(err)
 ```
 ### TestDeleteNode
 ```go
 
-	ok, err := getCdServer().GetNodeBroker().DeleteNode(context.Background(), "172.17.0.4")
+	ok, err := getTestCdServer().GetNodeBroker().DeleteNode(context.Background(), "172.17.0.4")
 	t.Log(ok, err)
 ```
 ### TestDeploy
 ```go
 
-	jserver := getCdServer()
-
+	jserver := getTestCdServer()
+	svc := getTestCdService()
 	for i := 0; i < 4; i++ {
-		jobName, taskId, _ := jserver.DeploySimple(context.Background(), "runit", "172.17.0.4") //172.17.0.3
+		jobName, taskId, _ := jserver.DeploySimple(context.Background(), svc, "172.17.0.4") //172.17.0.3
 
 		fmt.Println(jobName, taskId)
 
@@ -58,7 +60,7 @@ tips:
 ### TestGetTaskBuild
 ```go
 
-	build, _ := getCdServer().GetDeployResult(context.Background(), "1-prod-runit-172.17.0.4-0", 131)
+	build, _ := getTestCdServer().GetDeployResult(context.Background(), "1-prod-runit-172.17.0.4-1", 138)
 	bs, _ := json.Marshal(build)
 	t.Log(string(bs))
 ```
