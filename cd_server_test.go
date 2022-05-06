@@ -14,11 +14,11 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
-const testLocalIp = "192.168.0.104" //
+const testLocalIp = "10.11.244.87" //
 const testUsername = "admin"
 const testToken = "116e908012f0e76a71c788619470681f83" //admin
 
-func getCdServer() *CdServer {
+func getTestCdServer() *CdServer {
 	//http://127.0.0.1:8091/user/admin/configure 获取apitoken
 	cdServer := NewCdServer(context.Background(), "http://"+testLocalIp+":8091/", testUsername, testToken, "prod",
 		CdServerS3Option(
@@ -30,17 +30,19 @@ func getCdServer() *CdServer {
 			"http://"+testLocalIp+"/s3get.tgz", //s3get工具http下载地址
 		))
 
-	simpleSvc := NewDefaultCdService("runit", "pkg.tgz", "/tmp/test", "run.sh", map[string]string{
+	return cdServer
+}
+
+func getTestCdService() CdService {
+	return NewDefaultCdService("runit", "pkg.tgz", "/tmp/test", "run.sh", map[string]string{
 		"A": "1",
 		"B": "2",
 		"C": "3",
 	})
-	cdServer.AddService(simpleSvc)
-	return cdServer
 }
 
 func TestGetNodes(t *testing.T) {
-	nodes, err := getCdServer().GetNodeBroker().getAllNodes(context.Background())
+	nodes, err := getTestCdServer().GetNodeBroker().getAllNodes(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,21 +53,21 @@ func TestGetNodes(t *testing.T) {
 }
 
 func TestCreateNode(t *testing.T) {
-	err := getCdServer().GetNodeBroker().CreateNode(context.Background(), "172.17.0.4", "172.17.0.4",
+	err := getTestCdServer().GetNodeBroker().CreateNode(context.Background(), "172.17.0.4", "172.17.0.4",
 		CdNodeCredIdOption("defssh"), CdNodeNumExecutorsOption(5))
 	t.Log(err)
 }
 
 func TestDeleteNode(t *testing.T) {
-	ok, err := getCdServer().GetNodeBroker().DeleteNode(context.Background(), "172.17.0.4")
+	ok, err := getTestCdServer().GetNodeBroker().DeleteNode(context.Background(), "172.17.0.4")
 	t.Log(ok, err)
 }
 
 func TestDeploy(t *testing.T) {
-	jserver := getCdServer()
-
+	jserver := getTestCdServer()
+	svc := getTestCdService()
 	for i := 0; i < 4; i++ {
-		jobName, taskId, _ := jserver.DeploySimple(context.Background(), "runit", "172.17.0.4") //172.17.0.3
+		jobName, taskId, _ := jserver.DeploySimple(context.Background(), svc, "172.17.0.4") //172.17.0.3
 
 		fmt.Println(jobName, taskId)
 
@@ -74,7 +76,7 @@ func TestDeploy(t *testing.T) {
 }
 
 func TestGetTaskBuild(t *testing.T) {
-	build, _ := getCdServer().GetDeployResult(context.Background(), "1-prod-runit-172.17.0.4-0", 131)
+	build, _ := getTestCdServer().GetDeployResult(context.Background(), "1-prod-runit-172.17.0.4-1", 138)
 	bs, _ := json.Marshal(build)
 	t.Log(string(bs))
 }

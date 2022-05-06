@@ -9,12 +9,6 @@ type CdS3Info struct {
 	s3GetToolUrl string
 }
 
-func CdServerS3Option(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region, s3getToolUrl string) CdServerOption {
-	return func(server *CdServer) {
-		server.s3Info = NewCdS3Info(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region, s3getToolUrl)
-	}
-}
-
 func NewCdS3Info(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region, s3getToolUrl string) *CdS3Info {
 	return &CdS3Info{
 		s3AK:         s3AK,

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/liumingmin/gojenkins"
@@ -24,7 +23,6 @@ type CdServer struct {
 	s3Info  *CdS3Info
 
 	nodeBroker *CdNodeBroker
-	svcCache   map[string]*CdService
 }
 
 type DeployResult struct {
@@ -43,7 +41,6 @@ func NewCdServer(ctx context.Context, url, username, token, env string, options 
 		jenkins:    jenkins,
 		env:        env,
 		nodeBroker: NewCdNodeBroker(jenkins, env, nil),
-		svcCache:   make(map[string]*CdService),
 	}
 
 	if len(options) > 0 {
@@ -59,26 +56,13 @@ func (j *CdServer) GetNodeBroker() *CdNodeBroker {
 	return j.nodeBroker
 }
 
-func (j *CdServer) AddService(svc *CdService) {
-	j.svcCache[svc.Name()] = svc
-}
-
-func (j *CdServer) getServiceByName(name string) *CdService {
-	svc, ok := j.svcCache[name]
-	if ok {
-		return svc
-	}
-	return nil
-}
-
-func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, node *gojenkins.Node) (string, *gojenkins.Job, error) {
-	cnt := atomic.AddUint32(&service.deployCounter, 1)
-	idx := int64(cnt) % node.Raw.NumExecutors
-	jobName := fmt.Sprintf("%v-%v-%v-%v-%v", service.cdScript.scriptVersion, j.env, service.Name(), node.GetName(), idx)
+func (j *CdServer) getOrCreateJob(ctx context.Context, service CdService, node *gojenkins.Node) (string, *gojenkins.Job, error) {
+	idx := int64(service.IncDeployCounter()) % node.Raw.NumExecutors
+	jobName := fmt.Sprintf("%v-%v-%v-%v-%v", service.GetCdScript().scriptVersion, j.env, service.GetName(), node.GetName(), idx)
 
 	job, err := j.jenkins.GetJob(ctx, jobName)
-	if err != nil {
-		taskConfig, err := service.GetCdTaskScriptConfig(node.GetName())
+	if err != nil || job == nil {
+		taskConfig, err := service.GetCdScript().GetCdTaskScriptConfig(node.GetName())
 		//fmt.Println(taskConfig)
 		if err != nil {
 			return jobName, nil, err
@@ -105,21 +89,16 @@ func (j *CdServer) getOrCreateJob(ctx context.Context, service *CdService, node 
 	return jobName, job, nil
 }
 
-func (j *CdServer) DeploySimple(ctx context.Context, svcName, nodeName string) (string, int64, error) {
-	svc := j.getServiceByName(svcName)
-	if svc == nil {
-		return "", 0, errors.New("not found svc")
-	}
-
+func (j *CdServer) DeploySimple(ctx context.Context, service CdService, nodeName string) (string, int64, error) {
 	node := j.nodeBroker.GetNodeByName(nodeName)
 	if node == nil {
 		return "", 0, errors.New("not found node")
 	}
 
-	return j.deploy(ctx, svc, node)
+	return j.deploy(ctx, service, node)
 }
 
-func (j *CdServer) deploy(ctx context.Context, service *CdService, node *gojenkins.Node) (string, int64, error) {
+func (j *CdServer) deploy(ctx context.Context, service CdService, node *gojenkins.Node) (string, int64, error) {
 	jobName, job, err := j.getOrCreateJob(ctx, service, node)
 	if err != nil {
 		return jobName, 0, err
@@ -190,5 +169,11 @@ type CdServerOption func(*CdServer)
 func CdServerNodeOption(options ...CdNodeOption) CdServerOption {
 	return func(server *CdServer) {
 		server.nodeBroker.SetDefCdNodeParam(NewCdNodeParam(options...))
+	}
+}
+
+func CdServerS3Option(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region, s3getToolUrl string) CdServerOption {
+	return func(server *CdServer) {
+		server.s3Info = NewCdS3Info(s3AK, s3SK, s3Endpoint, s3Bucket, s3Region, s3getToolUrl)
 	}
 }
